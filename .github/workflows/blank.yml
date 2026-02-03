@@ -40,6 +40,6 @@ jobs:
           git clone https://github.com/budtmo/docker-android.git
           cd docker-android
           sudo apt install cpu-checker && kvm-ok
-          docker run -d --network host -e EMULATOR_DEVICE="Samsung Galaxy S10" -e WEB_VNC=true --device /dev/kvm --name android-container budtmo/docker-android:emulator_14.0
+          docker run --network host -e EMULATOR_DEVICE="Samsung Galaxy S10" -e WEB_VNC=true --device /dev/kvm --name android-container budtmo/docker-android:emulator_14.0
           
           
