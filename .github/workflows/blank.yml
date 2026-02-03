@@ -39,6 +39,7 @@ jobs:
           ttyd -p 5678 -W -t cursorStyle=bar -t 'theme={"background": "#1A1B2F"}' /usr/bin/fish &
           git clone https://github.com/HQarroum/docker-android.git andro
           cd andro
+          sed -i 's|FROM openjdk:21-jdk-slim|FROM eclipse-temurin:21-jdk-jammy|' Dockerfile
           docker build -t android-emulator .
           docker run -it --rm --device /dev/kvm -p 5555:5555 android-emulator
           
