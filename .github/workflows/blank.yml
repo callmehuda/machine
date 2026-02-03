@@ -41,5 +41,5 @@ jobs:
           cd andro
           sed -i 's|FROM openjdk:21-jdk-slim|FROM eclipse-temurin:21-jdk-jammy|' Dockerfile
           docker build -t android-emulator .
-          docker run -it --rm --device /dev/kvm -p 5555:5555 android-emulator
+          docker run --rm --device /dev/kvm -p 5555:5555 android-emulator
           
