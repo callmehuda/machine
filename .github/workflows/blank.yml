@@ -36,10 +36,10 @@ jobs:
           wget https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
           chmod +x ttyd.x86_64
           sudo mv ttyd.x86_64 /usr/bin/ttyd
-          ttyd -p 5678 -W -t cursorStyle=bar -t 'theme={"background": "#1A1B2F"}' /usr/bin/fish &
-          git clone https://github.com/HQarroum/docker-android.git andro
-          cd andro
-          sed -i 's|FROM openjdk:21-jdk-slim|FROM eclipse-temurin:21-jdk-jammy|' Dockerfile
-          docker build -t android-emulator .
-          docker run --rm --device /dev/kvm -p 5555:5555 android-emulator
+          ttyd -p 5678 -W -t cursorStyle=bar /usr/bin/fish &
+          git clone https://github.com/budtmo/docker-android.git
+          cd docker-android
+          sudo apt install cpu-checker && kvm-ok
+          docker run -d --network host -e EMULATOR_DEVICE="Samsung Galaxy S10" -e WEB_VNC=true --device /dev/kvm --name android-container budtmo/docker-android:emulator_14.0
+          
           
