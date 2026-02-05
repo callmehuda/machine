@@ -1,8 +1,8 @@
 name: scrcpy web
 
 on:
-  #push:
-  #  branches: [ "main" ]
+  push:
+    branches: [ "main" ]
   #pull_request:
   #  branches: [ "main" ]
 
@@ -26,13 +26,13 @@ jobs:
 
       - name: Setup Cloudflared
         run: |
-          sudo cloudflared service install eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMTBiMjdhNDctNTdlYS00ZWM1LWIyNzctYWFlMDZkNGJmZDMzIiwicyI6Ik56RXpOemRtWVRRdFpqYzFaaTAwWldRNExUaG1Zek10WmpCa1lXTm1Zek0wT1RkayJ9
-          cloudflared tunnel run --token eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMTBiMjdhNDctNTdlYS00ZWM1LWIyNzctYWFlMDZkNGJmZDMzIiwicyI6Ik56RXpOemRtWVRRdFpqYzFaaTAwWldRNExUaG1Zek10WmpCa1lXTm1Zek0wT1RkayJ9 &
+          #sudo cloudflared service install eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMTBiMjdhNDctNTdlYS00ZWM1LWIyNzctYWFlMDZkNGJmZDMzIiwicyI6Ik56RXpOemRtWVRRdFpqYzFaaTAwWldRNExUaG1Zek10WmpCa1lXTm1Zek0wT1RkayJ9
+          cloudflared tunnel run --token eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiYzE0OTEyZmEtZGEyZC00MDdlLTkzODQtOWI0Njg0ODQwYzdhIiwicyI6Ik9HVm1ORFk1WWpZdE1XWm1NeTAwTUdObUxUbGpOalV0WWpVelpXSm1NbUkyWW1JeSJ9 &
           
           
       - name: Idk
         run: |
-          docker run -d \
+          docker run \
           --name my \
           --privileged \
           -p 8000:8000 \
