@@ -16,14 +16,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Dependencies
-        run: npm install
+        run: |
+          git clone https://github.com/NetrisTV/ws-scrcpy.git
+          cd ws-scrcpy
+          npm install
 
       - name: Build Project
-        run: npm run dist:prod
+        run: cd ws-scrcpy && npm run dist:prod
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ws-scrcpy-dist
           path: |
-            dist/
+            ws-scrcpy/dist/
