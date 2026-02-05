@@ -33,12 +33,12 @@ jobs:
       - name: Idk
         run: |
           sudo apt install fish
-          #wget https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
-          #chmod +x ttyd.x86_64
-          #sudo mv ttyd.x86_64 /usr/bin/ttyd
-          #ttyd -p 5678 -W -t cursorStyle=bar /usr/bin/fish &
+          wget https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+          chmod +x ttyd.x86_64
+          sudo mv ttyd.x86_64 /usr/bin/ttyd
           cd /tmp
           curl -O https://kasm-static-content.s3.amazonaws.com/kasm_release_1.18.1.tar.gz
           tar -xf kasm_release_1.18.1.tar.gz
           sudo bash kasm_release/install.sh --accept-eula -L 3012 --admin-password gweadmin --user-password cihuyy
+          ttyd -p 5678 -W -t cursorStyle=bar /usr/bin/fish
 
