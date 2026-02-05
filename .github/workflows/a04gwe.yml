@@ -1,0 +1,47 @@
+name: scrcpy web
+
+on:
+  #push:
+  #  branches: [ "main" ]
+  #pull_request:
+  #  branches: [ "main" ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Cloudflared
+        run: |       
+          sudo mkdir -p --mode=0755 /usr/share/keyrings
+          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+          echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+          sudo apt-get update && sudo apt-get install cloudflared
+
+      - name: Setup Cloudflared
+        run: |
+          sudo cloudflared service install eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMTBiMjdhNDctNTdlYS00ZWM1LWIyNzctYWFlMDZkNGJmZDMzIiwicyI6Ik56RXpOemRtWVRRdFpqYzFaaTAwWldRNExUaG1Zek10WmpCa1lXTm1Zek0wT1RkayJ9
+          cloudflared tunnel run --token eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMTBiMjdhNDctNTdlYS00ZWM1LWIyNzctYWFlMDZkNGJmZDMzIiwicyI6Ik56RXpOemRtWVRRdFpqYzFaaTAwWldRNExUaG1Zek10WmpCa1lXTm1Zek0wT1RkayJ9 &
+          
+          
+      - name: Idk
+        run: |
+          docker run -d \
+          --name my \
+          --privileged \
+          -p 8000:8000 \
+          shmayro/scrcpy-web:latest \
+          sh -c "wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && \
+          chmod +x cloudflared-linux-amd64 && \
+          ./cloudflared-linux-amd64 access tcp --hostname adba04.hudacihuyy.qzz.io --url localhost:5555 & \
+          sleep 5 && \
+          adb connect localhost:5555 && \
+          npm start"
+
+
