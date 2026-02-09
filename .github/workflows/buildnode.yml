@@ -17,16 +17,15 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          git clone https://github.com/NetrisTV/ws-scrcpy.git
-          cd ws-scrcpy
-          npm install
+          git clone https://github.com/kasmtech/noVNC.git
 
       - name: Build Project
-        run: cd ws-scrcpy && npm run dist:prod
+        run: cd noVNC && npm install && npm run build
+
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ws-scrcpy-dist
+          name: noVNC-dist
           path: |
-            ws-scrcpy/dist/
+            noVNC/dist/
