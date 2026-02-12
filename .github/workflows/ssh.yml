@@ -1,4 +1,4 @@
-name: TorrentBot
+name: ssh
 
 on:
   schedule:
