@@ -1,8 +1,8 @@
 name: Android
 
 on:
-  #push:
-   # branches: [ "main" ]
+  push:
+    branches: [ "main" ]
   #pull_request:
   #  branches: [ "main" ]
 
@@ -26,7 +26,7 @@ jobs:
 
       - name: Setup Cloudflared
         run: |
-          #sudo cloudflared service install eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMDRlMDcyNjYtNjM0Ni00Y2FmLTkyZmQtZGVhODdiMjhmNTBkIiwicyI6IllXSmlPVE13TmpFdE1ETmtNUzAwTTJSaExUaG1PRFF0WWpReU1ERTROamRsT1RkbSJ9
+          sudo cloudflared service install eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMDRlMDcyNjYtNjM0Ni00Y2FmLTkyZmQtZGVhODdiMjhmNTBkIiwicyI6IllXSmlPVE13TmpFdE1ETmtNUzAwTTJSaExUaG1PRFF0WWpReU1ERTROamRsT1RkbSJ9
           cloudflared tunnel run --token eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMDRlMDcyNjYtNjM0Ni00Y2FmLTkyZmQtZGVhODdiMjhmNTBkIiwicyI6IllXSmlPVE13TmpFdE1ETmtNUzAwTTJSaExUaG1PRFF0WWpReU1ERTROamRsT1RkbSJ9 &
           
           
@@ -37,5 +37,8 @@ jobs:
           chmod +x ttyd.x86_64
           sudo mv ttyd.x86_64 /usr/bin/ttyd
           ttyd -p 5678 -W -t cursorStyle=bar /usr/bin/fish &
-          docker run --rm --name windows -e "VERSION=11" -e "RAM_SIZE=8G" -e "CPU_CORES=4" -p 8006:8006 --device=/dev/kvm --device=/dev/net/tun --cap-add NET_ADMIN -v "${PWD:-.}/windows:/storage" docker.io/dockurr/windows
+          git clone https://github.com/callmehuda/dockerify-android.git
+          cd dockerify-android
+          docker compose up
+          docker compose restart
 
