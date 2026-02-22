@@ -1,0 +1,307 @@
+name: Build Android NDK r27d (aarch64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  build:
+    name: Build LLVM Toolchain for NDK r27d
+    runs-on: ubuntu-24.04-arm  # ARM64 runner
+    timeout-minutes: 360
+
+    env:
+      SOURCE_ROOT: ${{ github.workspace }}/llvm-source
+      R27: ${{ github.workspace }}/ndk-r27d
+
+    steps:
+      # ─── 1. Install Dependencies ───────────────────────────────────────────
+      - name: Install required packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libc++-dev bison ninja-build cmake \
+            python3 git curl wget unzip repo \
+            build-essential libssl-dev
+
+      # ─── 2. Set up repo tool ───────────────────────────────────────────────
+      - name: Install repo tool
+        run: |
+          mkdir -p ~/.local/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.local/bin/repo
+          chmod a+x ~/.local/bin/repo
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      # ─── 3. Clone LLVM source ──────────────────────────────────────────────
+      - name: Clone LLVM Android source (llvm-toolchain branch)
+        run: |
+          mkdir -p $SOURCE_ROOT
+          cd $SOURCE_ROOT
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+          repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain
+          repo sync -c --no-tags --no-clone-bundle -j$(nproc)
+
+      # ─── 4. Create Symlinks ────────────────────────────────────────────────
+      - name: Create required symlinks
+        run: |
+          # Build tools symlinks
+          mkdir -p $SOURCE_ROOT/prebuilts/build-tools/linux-arm64/bin
+          cd $SOURCE_ROOT/prebuilts/build-tools/linux-arm64/bin
+          ln -sf $(which bison) bison
+          ln -sf $(which ninja) ninja
+
+          # Clang prebuilt symlink
+          mkdir -p $SOURCE_ROOT/prebuilts/clang/host
+          cd $SOURCE_ROOT/prebuilts/clang/host
+          ln -sf /usr linux-arm64
+
+          # CMake symlink
+          mkdir -p $SOURCE_ROOT/prebuilts/cmake
+          cd $SOURCE_ROOT/prebuilts/cmake
+          ln -sf /usr linux-arm64
+
+          # Python symlink
+          mkdir -p $SOURCE_ROOT/prebuilts/python
+          cd $SOURCE_ROOT/prebuilts/python
+          ln -sf /usr linux-arm64
+
+      # ─── 5. Patch do_build.py ──────────────────────────────────────────────
+      - name: Patch do_build.py – disable stage1, use system toolchain
+        run: |
+          DOBUILD=$SOURCE_ROOT/toolchain/llvm_android/do_build.py
+          python3 - <<'PYEOF'
+          import re, pathlib
+
+          path = pathlib.Path("${{ env.SOURCE_ROOT }}/toolchain/llvm_android/do_build.py")
+          content = path.read_text()
+
+          # Comment out stage1 block and bootstrap blocks, inject system toolchain
+          old_marker = "if not args.bootstrap_use_prebuilt and not args.bootstrap_use:"
+          new_line   = "set_default_toolchain(toolchains.Toolchain(Path(\"/usr\"),Path(\"/usr\")))"
+
+          lines = content.splitlines(keepends=True)
+          result = []
+          in_block = False
+          for line in lines:
+              stripped = line.lstrip()
+              # Detect start of the block we want to comment out
+              if stripped.startswith("if not args.bootstrap_use_prebuilt"):
+                  in_block = True
+              if in_block:
+                  result.append("# " + line)
+                  if stripped.startswith("set_default_toolchain(stage1"):
+                      in_block = False
+                      result.append(new_line + "\n")
+              else:
+                  result.append(line)
+
+          path.write_text("".join(result))
+          print("Patched do_build.py OK")
+          PYEOF
+
+      - name: Patch do_build.py – disable libxml2 and xz build
+        run: |
+          python3 - <<'PYEOF'
+          import pathlib
+
+          path = pathlib.Path("${{ env.SOURCE_ROOT }}/toolchain/llvm_android/do_build.py")
+          content = path.read_text()
+
+          content = content.replace(
+              "libxml2_builder.build()",
+              "# libxml2_builder.build()"
+          )
+          content = content.replace(
+              "xz_builder.build()",
+              "# xz_builder.build()"
+          )
+
+          path.write_text(content)
+          print("Patched libxml2 and xz OK")
+          PYEOF
+
+      # ─── 6. Patch py3_utils.py ─────────────────────────────────────────────
+      - name: Patch py3_utils.py – change host tag to linux-arm64
+        run: |
+          PY3=$SOURCE_ROOT/toolchain/llvm_android/py3_utils.py
+          sed -i "s/return 'linux-x86'/return 'linux-arm64'/" "$PY3"
+          echo "Patched py3_utils.py OK"
+
+      # ─── 7. Patch builders.py ──────────────────────────────────────────────
+      - name: Patch builders.py – add Release CMake build type
+        run: |
+          python3 - <<'PYEOF'
+          import pathlib
+
+          path = pathlib.Path("${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android/builders.py")
+          content = path.read_text()
+
+          old = "            if self.debug_build:\n                defines['CMAKE_BUILD_TYPE'] = 'Debug'"
+          new = (
+              "            if self.debug_build:\n"
+              "                defines['CMAKE_BUILD_TYPE'] = 'Debug'\n"
+              "            else:\n"
+              "                defines['CMAKE_BUILD_TYPE'] = 'Release'"
+          )
+          content = content.replace(old, new)
+          path.write_text(content)
+          print("Patched builders.py OK")
+          PYEOF
+
+      # ─── 8. Patch configs.py ───────────────────────────────────────────────
+      - name: Patch configs.py – update LinuxConfig for ARM64
+        run: |
+          python3 - <<'PYEOF'
+          import pathlib
+
+          path = pathlib.Path("${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android/configs.py")
+          content = path.read_text()
+
+          replacements = [
+              (
+                  "sysroot: Optional[Path] = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8' / 'sysroot'",
+                  "sysroot: Optional[Path] = Path('/')"
+              ),
+              (
+                  "gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8'",
+                  "gcc_root: Path = Path('/')"
+              ),
+              (
+                  "gcc_triple: str = 'x86_64-linux'",
+                  "gcc_triple: str = 'aarch64-linux'"
+              ),
+              (
+                  "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'x86_64-unknown-linux-gnu'",
+                  "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'aarch64-unknown-linux-gnu'"
+              ),
+          ]
+
+          for old, new in replacements:
+              content = content.replace(old, new)
+
+          path.write_text(content)
+          print("Patched configs.py OK")
+          PYEOF
+
+      # ─── 9. Patch hosts.py ─────────────────────────────────────────────────
+      - name: Patch hosts.py – change Linux host tag to linux-arm64
+        run: |
+          python3 - <<'PYEOF'
+          import pathlib
+
+          path = pathlib.Path("${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android/hosts.py")
+          content = path.read_text()
+          content = content.replace(
+              "Host.Linux: 'linux-x86'",
+              "Host.Linux: 'linux-arm64'"
+          )
+          path.write_text(content)
+          print("Patched hosts.py OK")
+          PYEOF
+
+      # ─── 10. Patch paths.py ────────────────────────────────────────────────
+      - name: Patch paths.py – remove prebuilt version suffix and fix ninja path
+        run: |
+          python3 - <<'PYEOF'
+          import pathlib, re
+
+          path = pathlib.Path("${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android/paths.py")
+          content = path.read_text()
+
+          # Fix CLANG_PREBUILT_DIR (remove clang prebuilt version)
+          content = re.sub(
+              r"CLANG_PREBUILT_DIR: Path = \(PREBUILTS_DIR / 'clang' / 'host' / hosts\.build_host\(\)\.os_tag\s*\n\s*/ constants\.CLANG_PREBUILT_VERSION\)",
+              "CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag)",
+              content
+          )
+
+          # Fix NINJA_BIN_PATH (use os_tag instead of os_tag_musl)
+          content = content.replace(
+              "NINJA_BIN_PATH: Path = BUILD_TOOLS_DIR / hosts.build_host().os_tag_musl / 'bin' / 'ninja'",
+              "NINJA_BIN_PATH: Path = BUILD_TOOLS_DIR / hosts.build_host().os_tag / 'bin' / 'ninja'"
+          )
+
+          path.write_text(content)
+          print("Patched paths.py OK")
+          PYEOF
+
+      # ─── 11. Build Toolchain ───────────────────────────────────────────────
+      - name: Build LLVM toolchain
+        run: |
+          cd $SOURCE_ROOT
+          python3 toolchain/llvm_android/build.py \
+            --no-build windows \
+            --skip-tests \
+            --no-musl
+
+      # ─── 12. Download NDK r27d ─────────────────────────────────────────────
+      - name: Download Android NDK r27d
+        run: |
+          mkdir -p $R27
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux.zip -O ndk-r27d.zip
+          unzip -q ndk-r27d.zip
+          mv android-ndk-r27d/* $R27/
+
+      # ─── 13. Patch NDK r27d ────────────────────────────────────────────────
+      - name: Patch NDK r27d – copy built toolchain
+        run: |
+          # Symlinks for build tools
+          cd $R27/prebuilt/linux-x86_64/bin
+          ln -sf $(which make) make
+          ln -sf $(which yasm) yasm 2>/dev/null || true
+
+          # Copy compiled clang binaries
+          cp -f $SOURCE_ROOT/out/stage2/bin/* \
+            $R27/toolchains/llvm/prebuilt/linux-x86_64/bin/
+
+          # Copy clang runtime libs
+          mkdir -p $R27/toolchains/llvm/prebuilt/linux-x86_64/lib/clang
+          cp -r $SOURCE_ROOT/out/stage2/lib/clang/22 \
+            $R27/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/
+
+          # Symlink linux runtime from previous clang version (21 → 22)
+          cd $R27/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/22/lib
+          if [ ! -L linux ] && [ ! -d linux ]; then
+            cp -r $R27/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/21/lib/linux .
+          fi
+
+          # Python symlink
+          cd $R27/toolchains/llvm/prebuilt/linux-x86_64/python3/bin
+          ln -sf $(which python3) python3.11
+
+      - name: Patch ndk_bin_common.sh – add aarch64 support
+        run: |
+          COMMON_SH=$R27/build/tools/ndk_bin_common.sh
+          # Add aarch64 to the existing x86_64 case match
+          sed -i 's/x86_64|amd64)/x86_64|amd64|aarch64)/' "$COMMON_SH"
+          echo "Patched ndk_bin_common.sh OK"
+          grep -A2 "x86_64" "$COMMON_SH"
+
+      # ─── 14. Package Output ────────────────────────────────────────────────
+      - name: Package patched NDK r27d
+        run: |
+          cd $(dirname $R27)
+          zip -r android-ndk-r27d-aarch64-linux.zip $(basename $R27)
+          echo "NDK_ZIP=$(pwd)/android-ndk-r27d-aarch64-linux.zip" >> $GITHUB_ENV
+
+      - name: Upload NDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-ndk-r27d-aarch64
+          path: ${{ env.NDK_ZIP }}
+          retention-days: 7
+
+      - name: Upload build logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ${{ env.SOURCE_ROOT }}/out/**/*.log
+          retention-days: 3
