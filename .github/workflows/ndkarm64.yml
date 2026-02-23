@@ -73,7 +73,7 @@ jobs:
         repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain --depth=1
         
         # Sync dengan filter untuk mengurangi download
-        repo sync -c --no-tags --optimized-fetch --prune -j$(nproc)
+        repo sync -c
 
     - name: Create Symbolic Links
       run: |
