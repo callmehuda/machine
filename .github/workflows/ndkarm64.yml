@@ -1,57 +1,84 @@
-name: Build Ndk
+name: Build NDK aarch64-linux (r27d)
 
 on:
-  push:
-    branches: [ "main" ]
-  #pull_request:
-  #  branches: [ "main" ]
+  workflow_dispatch: # Memungkinkan eksekusi manual via tab Actions
 
-  workflow_dispatch:
+permissions:
+  contents: write    # Diperlukan untuk membuat Release secara otomatis
 
 jobs:
-  build-ndk:
-    runs-on: ubuntu-latest
-
+  build:
+    name: Compile Android NDK r27d
+    runs-on: ubuntu-24.04-arm # Menggunakan arsitektur native ARM64 dari GitHub
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout SnowNF Repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            git clang bison llvm llvm-dev python3 lld ninja-build cmake \
-            crossbuild-essential-arm64 repo
+      - name: Free Up Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # Membersihkan pre-installed tools untuk ruang repositori AOSP yang masif (>30GB)
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
 
-      - name: Prepare directories
+      - name: Install System Dependencies
         run: |
-          mkdir -p $GITHUB_WORKSPACE/llvm-toolchain
-          mkdir -p $GITHUB_WORKSPACE/aarch64ndk
-        env:
-          llvm_toolchain: ${{ github.workspace }}/llvm-toolchain
-          aarch64ndk: ${{ github.workspace }}/aarch64ndk
+          sudo apt-get update
+          sudo apt-get install -y git python3 python3-pip curl build-essential \
+                                  ninja-build zip unzip bison flex bc \
+                                  libssl-dev libncurses-dev rsync pbzip2
+          
+      - name: Setup Repo Tool
+        run: |
+          mkdir -p ~/.bin
+          curl -o ~/.bin/repo https://storage.googleapis.com/git-repo-downloads/repo
+          chmod a+rx ~/.bin/repo
+          echo "$HOME/.bin" >> $GITHUB_PATH
 
-      - name: Download NDK source
+      - name: Initialize & Sync Android Platform Source (r27d)
         run: |
-          cd ${{ github.workspace }}/llvm-toolchain
-          repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain
-          repo sync -c
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          
+          mkdir -p aosp-ndk
+          cd aosp-ndk
+          
+          # Inisialisasi manifest platform Android dengan branch ndk-r27d
+          repo init -u https://android.googlesource.com/platform/manifest -b ndk-r27d --depth=1
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
-      - name: Clone modified ndk-aarch64-linux repo
+      - name: Apply SnowNF Patches
         run: |
-          cd ${{ github.workspace }}/aarch64ndk
-          git clone https://github.com/SnowNF/ndk-aarch64-linux
+          # Menyalin file modifikasi aarch64-linux (jika ada script custom dari repo Anda) ke dalam tree NDK
+          rsync -a --exclude='.git/' --exclude='aosp-ndk/' $GITHUB_WORKSPACE/ $GITHUB_WORKSPACE/aosp-ndk/
 
-      - name: Replace source code
+      - name: Build NDK
+        working-directory: aosp-ndk
         run: |
-          cd ${{ github.workspace }}/llvm-toolchain/toolchain/llvm_android
-          mv patches ../patches || true
-          rm -rf *
-          cp -rf ${{ github.workspace }}/aarch64ndk/ndk-aarch64-linux/* .
-          mv ../patches patches || true
+          # Eksekusi script standar NDK (bisa disesuaikan jika digest .txt spesifik Anda memiliki flag lain)
+          python3 ndk/build/tools/make_ndk.py --out-dir ../out
+          
+      - name: Package NDK
+        working-directory: out
+        run: |
+          # Kompresi parallel menggunakan pbzip2 agar lebih cepat
+          tar -I pbzip2 -cf android-ndk-r27d-linux-aarch64.tar.bz2 android-ndk-r27d/
 
-      - name: Build Clang for aarch64
-        run: |
-          cd ${{ github.workspace }}/llvm-toolchain
-          python3 toolchain/llvm_android/build.py \
-            --no-build windows --skip-tests --single-stage --no-musl
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-r27d-aarch64
+          path: out/android-ndk-r27d-linux-aarch64.tar.bz2
+          retention-days: 7
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: r27d-build
+          name: "Android NDK r27d (aarch64-linux)"
+          files: out/android-ndk-r27d-linux-aarch64.tar.bz2
