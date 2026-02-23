@@ -1,14 +1,6 @@
-name: Build NDK r27d AArch64
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
 jobs:
   build-ndk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm64
 
     steps:
       - name: Checkout repository
@@ -25,43 +17,31 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/llvm-toolchain
           mkdir -p $GITHUB_WORKSPACE/aarch64ndk
-          echo "llvm-toolchain=$GITHUB_WORKSPACE/llvm-toolchain" >> $GITHUB_ENV
-          echo "aarch64ndk=$GITHUB_WORKSPACE/aarch64ndk" >> $GITHUB_ENV
+        env:
+          llvm_toolchain: ${{ github.workspace }}/llvm-toolchain
+          aarch64ndk: ${{ github.workspace }}/aarch64ndk
 
       - name: Download NDK source
         run: |
-          cd $llvm-toolchain
+          cd ${{ github.workspace }}/llvm-toolchain
           repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain
           repo sync -c
 
       - name: Clone modified ndk-aarch64-linux repo
         run: |
-          cd $aarch64ndk
+          cd ${{ github.workspace }}/aarch64ndk
           git clone https://github.com/SnowNF/ndk-aarch64-linux
 
       - name: Replace source code
         run: |
-          cd $llvm-toolchain/toolchain/llvm_android
+          cd ${{ github.workspace }}/llvm-toolchain/toolchain/llvm_android
           mv patches ../patches || true
           rm -rf *
-          cp -rf $aarch64ndk/ndk-aarch64-linux/* .
+          cp -rf ${{ github.workspace }}/aarch64ndk/ndk-aarch64-linux/* .
           mv ../patches patches || true
 
       - name: Build Clang for aarch64
         run: |
-          cd $llvm-toolchain
+          cd ${{ github.workspace }}/llvm-toolchain
           python3 toolchain/llvm_android/build.py \
             --no-build windows --skip-tests --single-stage --no-musl
-
-      - name: Package artifacts
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/artifacts
-          cp -r $llvm-toolchain/out/stage2/bin $GITHUB_WORKSPACE/artifacts/
-          cp -r $llvm-toolchain/out/stage2/lib $GITHUB_WORKSPACE/artifacts/
-          cp -r $llvm-toolchain/out/stage2/include $GITHUB_WORKSPACE/artifacts/
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ndk-r27d-aarch64
-          path: $GITHUB_WORKSPACE/artifacts
