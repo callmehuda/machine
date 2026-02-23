@@ -63,164 +63,164 @@ jobs:
         run: |
           # patch_do_build.py
           cat > /tmp/patch_do_build.py << 'EOF'
-import pathlib, sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text().splitlines(keepends=True)
-
-result = []
-skip = False
-bootstrap_use_done = False
-bootstrap_build_done = False
-
-i = 0
-while i < len(lines):
-    line = lines[i]
-    stripped = line.lstrip()
-
-    # Comment out block: "if not args.bootstrap_use_prebuilt..."
-    # sampai baris "set_default_toolchain(stage1.installed_toolchain)"
-    if stripped.startswith("if not args.bootstrap_use_prebuilt and not args.bootstrap_use:"):
-        skip = True
-
-    if skip and not bootstrap_use_done and not bootstrap_build_done:
-        result.append("# " + line)
-        if "set_default_toolchain(stage1.installed_toolchain)" in line:
-            skip = False
-            indent = len(line) - len(line.lstrip())
-            result.append(" " * indent + 'set_default_toolchain(toolchains.Toolchain(Path("/usr"),Path("/usr")))\n')
-        i += 1
-        continue
-
-    # Comment out block: "if args.bootstrap_use:"
-    if not bootstrap_use_done and stripped.startswith("if args.bootstrap_use:"):
-        bootstrap_use_done = True
-        skip = True
-
-    if skip and bootstrap_use_done and not bootstrap_build_done:
-        result.append("# " + line)
-        # Blok selesai saat indent kembali ke level if (baris non-kosong non-comment di level sama)
-        if i + 1 < len(lines):
-            next_stripped = lines[i+1].lstrip()
-            next_indent = len(lines[i+1]) - len(next_stripped)
-            cur_indent = len(line) - len(line.lstrip())
-            if next_stripped and next_indent <= cur_indent and not next_stripped.startswith("#"):
-                skip = False
-        i += 1
-        continue
-
-    # Comment out block: "if args.bootstrap_build_only:"
-    if not bootstrap_build_done and stripped.startswith("if args.bootstrap_build_only:"):
-        bootstrap_build_done = True
-        skip = True
-
-    if skip and bootstrap_build_done:
-        result.append("# " + line)
-        if stripped.startswith("return"):
-            skip = False
-        i += 1
-        continue
-
-    result.append(line)
-    i += 1
-
-path.write_text("".join(result))
-print("patch_do_build.py: DONE")
-EOF
+          import pathlib, sys
+          
+          path = pathlib.Path(sys.argv[1])
+          lines = path.read_text().splitlines(keepends=True)
+          
+          result = []
+          skip = False
+          bootstrap_use_done = False
+          bootstrap_build_done = False
+          
+          i = 0
+          while i < len(lines):
+              line = lines[i]
+              stripped = line.lstrip()
+          
+              # Comment out block: "if not args.bootstrap_use_prebuilt..."
+              # sampai baris "set_default_toolchain(stage1.installed_toolchain)"
+              if stripped.startswith("if not args.bootstrap_use_prebuilt and not args.bootstrap_use:"):
+                  skip = True
+          
+              if skip and not bootstrap_use_done and not bootstrap_build_done:
+                  result.append("# " + line)
+                  if "set_default_toolchain(stage1.installed_toolchain)" in line:
+                      skip = False
+                      indent = len(line) - len(line.lstrip())
+                      result.append(" " * indent + 'set_default_toolchain(toolchains.Toolchain(Path("/usr"),Path("/usr")))\n')
+                  i += 1
+                  continue
+          
+              # Comment out block: "if args.bootstrap_use:"
+              if not bootstrap_use_done and stripped.startswith("if args.bootstrap_use:"):
+                  bootstrap_use_done = True
+                  skip = True
+          
+              if skip and bootstrap_use_done and not bootstrap_build_done:
+                  result.append("# " + line)
+                  # Blok selesai saat indent kembali ke level if (baris non-kosong non-comment di level sama)
+                  if i + 1 < len(lines):
+                      next_stripped = lines[i+1].lstrip()
+                      next_indent = len(lines[i+1]) - len(next_stripped)
+                      cur_indent = len(line) - len(line.lstrip())
+                      if next_stripped and next_indent <= cur_indent and not next_stripped.startswith("#"):
+                          skip = False
+                  i += 1
+                  continue
+          
+              # Comment out block: "if args.bootstrap_build_only:"
+              if not bootstrap_build_done and stripped.startswith("if args.bootstrap_build_only:"):
+                  bootstrap_build_done = True
+                  skip = True
+          
+              if skip and bootstrap_build_done:
+                  result.append("# " + line)
+                  if stripped.startswith("return"):
+                      skip = False
+                  i += 1
+                  continue
+          
+              result.append(line)
+              i += 1
+          
+          path.write_text("".join(result))
+          print("patch_do_build.py: DONE")
+          EOF
 
           # patch_libxml2_xz.py
           cat > /tmp/patch_libxml2_xz.py << 'EOF'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-content = path.read_text()
-content = content.replace("        libxml2_builder.build()", "        # libxml2_builder.build()")
-content = content.replace("            xz_builder.build()", "            # xz_builder.build()")
-path.write_text(content)
-print("patch_libxml2_xz.py: DONE")
-EOF
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          content = path.read_text()
+          content = content.replace("        libxml2_builder.build()", "        # libxml2_builder.build()")
+          content = content.replace("            xz_builder.build()", "            # xz_builder.build()")
+          path.write_text(content)
+          print("patch_libxml2_xz.py: DONE")
+          EOF
 
           # patch_builders.py
           cat > /tmp/patch_builders.py << 'EOF'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-content = path.read_text()
-old = "            if self.debug_build:\n                defines['CMAKE_BUILD_TYPE'] = 'Debug'"
-new = (
-    "            if self.debug_build:\n"
-    "                defines['CMAKE_BUILD_TYPE'] = 'Debug'\n"
-    "            else:\n"
-    "                defines['CMAKE_BUILD_TYPE'] = 'Release'"
-)
-if old in content:
-    content = content.replace(old, new)
-    path.write_text(content)
-    print("patch_builders.py: DONE")
-else:
-    print("WARNING: pattern not found in builders.py, skipping")
-EOF
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          content = path.read_text()
+          old = "            if self.debug_build:\n                defines['CMAKE_BUILD_TYPE'] = 'Debug'"
+          new = (
+              "            if self.debug_build:\n"
+              "                defines['CMAKE_BUILD_TYPE'] = 'Debug'\n"
+              "            else:\n"
+              "                defines['CMAKE_BUILD_TYPE'] = 'Release'"
+          )
+          if old in content:
+              content = content.replace(old, new)
+              path.write_text(content)
+              print("patch_builders.py: DONE")
+          else:
+              print("WARNING: pattern not found in builders.py, skipping")
+          EOF
 
           # patch_configs.py
           cat > /tmp/patch_configs.py << 'EOF'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-content = path.read_text()
-replacements = [
-    (
-        "sysroot: Optional[Path] = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8' / 'sysroot'",
-        "sysroot: Optional[Path] = Path('/')"
-    ),
-    (
-        "gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8'",
-        "gcc_root: Path = Path('/')"
-    ),
-    (
-        "gcc_triple: str = 'x86_64-linux'",
-        "gcc_triple: str = 'aarch64-linux'"
-    ),
-    (
-        "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'x86_64-unknown-linux-gnu'",
-        "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'aarch64-unknown-linux-gnu'"
-    ),
-]
-for old, new in replacements:
-    if old not in content:
-        print(f"WARNING: not found: {old[:60]}")
-    else:
-        content = content.replace(old, new)
-path.write_text(content)
-print("patch_configs.py: DONE")
-EOF
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          content = path.read_text()
+          replacements = [
+              (
+                  "sysroot: Optional[Path] = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8' / 'sysroot'",
+                  "sysroot: Optional[Path] = Path('/')"
+              ),
+              (
+                  "gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8'",
+                  "gcc_root: Path = Path('/')"
+              ),
+              (
+                  "gcc_triple: str = 'x86_64-linux'",
+                  "gcc_triple: str = 'aarch64-linux'"
+              ),
+              (
+                  "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'x86_64-unknown-linux-gnu'",
+                  "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'aarch64-unknown-linux-gnu'"
+              ),
+          ]
+          for old, new in replacements:
+              if old not in content:
+                  print(f"WARNING: not found: {old[:60]}")
+              else:
+                  content = content.replace(old, new)
+          path.write_text(content)
+          print("patch_configs.py: DONE")
+          EOF
 
           # patch_hosts.py
           cat > /tmp/patch_hosts.py << 'EOF'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-content = path.read_text()
-content = content.replace("Host.Linux: 'linux-x86'", "Host.Linux: 'linux-arm64'")
-path.write_text(content)
-print("patch_hosts.py: DONE")
-EOF
-
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          content = path.read_text()
+          content = content.replace("Host.Linux: 'linux-x86'", "Host.Linux: 'linux-arm64'")
+          path.write_text(content)
+          print("patch_hosts.py: DONE")
+          EOF
+          
           # patch_paths.py
           cat > /tmp/patch_paths.py << 'EOF'
-import pathlib, re, sys
-path = pathlib.Path(sys.argv[1])
-content = path.read_text()
-# Hapus / constants.CLANG_PREBUILT_VERSION dari CLANG_PREBUILT_DIR
-content = re.sub(
-    r"(CLANG_PREBUILT_DIR: Path = \(PREBUILTS_DIR / 'clang' / 'host' / hosts\.build_host\(\)\.os_tag)"
-    r"\s*\n\s*/ constants\.CLANG_PREBUILT_VERSION(\))",
-    r"\1\2",
-    content
-)
-# Ganti os_tag_musl -> os_tag untuk ninja
-content = content.replace(
-    "NINJA_BIN_PATH: Path = BUILD_TOOLS_DIR / hosts.build_host().os_tag_musl / 'bin' / 'ninja'",
-    "NINJA_BIN_PATH: Path = BUILD_TOOLS_DIR / hosts.build_host().os_tag / 'bin' / 'ninja'"
-)
-path.write_text(content)
-print("patch_paths.py: DONE")
-EOF
+          import pathlib, re, sys
+          path = pathlib.Path(sys.argv[1])
+          content = path.read_text()
+          # Hapus / constants.CLANG_PREBUILT_VERSION dari CLANG_PREBUILT_DIR
+          content = re.sub(
+              r"(CLANG_PREBUILT_DIR: Path = \(PREBUILTS_DIR / 'clang' / 'host' / hosts\.build_host\(\)\.os_tag)"
+              r"\s*\n\s*/ constants\.CLANG_PREBUILT_VERSION(\))",
+              r"\1\2",
+              content
+          )
+          # Ganti os_tag_musl -> os_tag untuk ninja
+          content = content.replace(
+              "NINJA_BIN_PATH: Path = BUILD_TOOLS_DIR / hosts.build_host().os_tag_musl / 'bin' / 'ninja'",
+              "NINJA_BIN_PATH: Path = BUILD_TOOLS_DIR / hosts.build_host().os_tag / 'bin' / 'ninja'"
+          )
+          path.write_text(content)
+          print("patch_paths.py: DONE")
+          EOF
 
       # ─── 6. Apply patches ─────────────────────────────────────────────────
       - name: Patch do_build.py – disable stage1, use system toolchain
