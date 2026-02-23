@@ -1,369 +1,67 @@
-name: Build Android NDK LLVM r27d (ARM64)
+name: Build NDK r27d AArch64
 
 on:
-  push:
-    branches: [ main, master, r27d ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
-
-env:
-  SOURCE_ROOT: ${{ github.workspace }}/android-llvm
-  NDK_VERSION: r27d
-  CLANG_VERSION: clang-r522817d
+  push:
+    branches:
+      - main
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04-arm  # Runner ARM64 native
-    timeout-minutes: 360        # 6 hours timeout untuk build besar
-    
+  build-ndk:
+    runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git clang bison llvm llvm-dev python3 lld ninja-build cmake \
+            crossbuild-essential-arm64 repo
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          git \
-          repo \
-          curl \
-          wget \
-          unzip \
-          libc++-dev \
-          libc++abi-dev \
-          bison \
-          ninja-build \
-          cmake \
-          python3-pip \
-          python3-venv \
-          build-essential \
-          libssl-dev \
-          libxml2-dev \
-          libncurses5-dev \
-          liblzma-dev \
-          swig \
-          zlib1g-dev \
-          libzstd-dev \
-          m4 \
-          flex \
-          texinfo \
-          help2man \
-          gawk \
-          gettext \
-          rsync \
-          file
+      - name: Prepare directories
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/llvm-toolchain
+          mkdir -p $GITHUB_WORKSPACE/aarch64ndk
+          echo "llvm-toolchain=$GITHUB_WORKSPACE/llvm-toolchain" >> $GITHUB_ENV
+          echo "aarch64ndk=$GITHUB_WORKSPACE/aarch64ndk" >> $GITHUB_ENV
 
-    - name: Setup Git identity
-      run: |
-        git config --global user.email "github-actions@github.com"
-        git config --global user.name "GitHub Actions"
+      - name: Download NDK source
+        run: |
+          cd $llvm-toolchain
+          repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain
+          repo sync -c
 
-    - name: Initialize Repo and Sync Source
-      run: |
-        mkdir -p ${{ env.SOURCE_ROOT }}
-        cd ${{ env.SOURCE_ROOT }}
-        
-        # Initialize repo dengan branch llvm-toolchain
-        repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain --depth=1
-        
-        # Sync dengan filter untuk mengurangi download
-        repo sync -c
+      - name: Clone modified ndk-aarch64-linux repo
+        run: |
+          cd $aarch64ndk
+          git clone https://github.com/SnowNF/ndk-aarch64-linux
 
-    - name: Create Symbolic Links
-      run: |
-        cd ${{ env.SOURCE_ROOT }}
-        
-        # Setup prebuilt tools
-        mkdir -p prebuilts/build-tools/linux-arm64/bin
-        cd prebuilts/build-tools/linux-arm64/bin
-        sudo ln -sf /usr/bin/bison .
-        sudo ln -sf /usr/bin/ninja .
-        
-        # Setup clang host
-        cd ${{ env.SOURCE_ROOT }}/prebuilts/clang/host
-        sudo ln -sf /usr linux-arm64
-        
-        # Setup cmake
-        cd ${{ env.SOURCE_ROOT }}/prebuilts/cmake
-        sudo ln -sf /usr linux-arm64
-        
-        # Setup python
-        cd ${{ env.SOURCE_ROOT }}/prebuilts/python
-        sudo ln -sf /usr linux-arm64
+      - name: Replace source code
+        run: |
+          cd $llvm-toolchain/toolchain/llvm_android
+          mv patches ../patches || true
+          rm -rf *
+          cp -rf $aarch64ndk/ndk-aarch64-linux/* .
+          mv ../patches patches || true
 
-    - name: Modify Build Scripts - do_build.py
-      run: |
-        cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android
-        
-        # Backup original
-        cp do_build.py do_build.py.bak
-        
-        # Disable stage1 dan set system toolchain
-        python3 << 'EOF'
-        import re
-        
-        with open('do_build.py', 'r') as f:
-            content = f.read()
-        
-        # Pattern untuk comment out stage1 block dan tambah set_default_toolchain
-        stage1_pattern = r'(if not args\.bootstrap_use_prebuilt and not args\.bootstrap_use:.*?)(if args\.bootstrap_use:)'
-        
-        replacement = '''# Disabled for ARM64 build
-        # if not args.bootstrap_use_prebuilt and not args.bootstrap_use:
-        #     stage1 = builders.Stage1Builder(host_configs)
-        #     stage1.build_name = 'stage1'
-        #     stage1.svn_revision = android_version.get_svn_revision()
-        #     stage1.build_lldb = build_lldb
-        #     stage1.enable_mlgo = mlgo
-        #     stage1.build_extra_tools = args.run_tests_stage1
-        #     stage1.build_cross_runtimes = hosts.build_host().is_linux and (args.debug or instrumented)
-        #     stage1.libzstd = libzstd_builder
-        #     stage1.build()
-        #     if hosts.build_host().is_linux:
-        #         add_header_links('stage1', host_config=configs.host_config(musl))
-        #     if not args.skip_tests and args.run_tests_stage1:
-        #         stage1.test()
-        #     set_default_toolchain(stage1.installed_toolchain)
-        # if args.bootstrap_use:
-        #     if (paths.OUT_DIR / 'stage1-install').exists():
-        #         shutil.rmtree(paths.OUT_DIR / 'stage1-install')
-        #     if (paths.OUT_DIR / 'stage2-install').exists():
-        #         shutil.rmtree(paths.OUT_DIR / 'stage2-install')
-        #     with timer.Timer('extract_bootstrap'):
-        #         utils.extract_tarball(paths.OUT_DIR, args.bootstrap_use)
-        #     if (paths.OUT_DIR / 'stage2-install').exists():
-        #         (paths.OUT_DIR / 'stage2-install').rename(paths.OUT_DIR / 'stage1-install')
-        #     set_default_toolchain(toolchains.Toolchain(paths.OUT_DIR / 'stage1-install', paths.OUT_DIR / 'stage1'))
-        # if args.bootstrap_build_only:
-        #     with timer.Timer('package_bootstrap'):
-        #         utils.create_tarball(paths.OUT_DIR, ['stage1', 'stage1-install'], paths.DIST_DIR / 'stage1-install.tar.xz')
-        #     return
-        set_default_toolchain(toolchains.Toolchain(Path("/usr"), Path("/usr")))
-        
-        \\2'''
-        
-        content = re.sub(stage1_pattern, replacement, content, flags=re.DOTALL)
-        
-        # Disable libxml2 dan xz build
-        content = content.replace(
-            'libxml2_builder.build()',
-            '# libxml2_builder.build()'
-        )
-        content = content.replace(
-            'xz_builder.build()',
-            '# xz_builder.build()'
-        )
-        
-        with open('do_build.py', 'w') as f:
-            f.write(content)
-        
-        print("Modified do_build.py successfully")
-        EOF
+      - name: Build Clang for aarch64
+        run: |
+          cd $llvm-toolchain
+          python3 toolchain/llvm_android/build.py \
+            --no-build windows --skip-tests --single-stage --no-musl
 
-    - name: Modify py3_utils.py - Host Tag
-      run: |
-        cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android
-        
-        sed -i "s/return 'linux-x86'/return 'linux-arm64'/" py3_utils.py
-        
-        echo "Updated py3_utils.py:"
-        grep -A2 "def get_host_tag" py3_utils.py || true
+      - name: Package artifacts
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/artifacts
+          cp -r $llvm-toolchain/out/stage2/bin $GITHUB_WORKSPACE/artifacts/
+          cp -r $llvm-toolchain/out/stage2/lib $GITHUB_WORKSPACE/artifacts/
+          cp -r $llvm-toolchain/out/stage2/include $GITHUB_WORKSPACE/artifacts/
 
-    - name: Modify builders.py - CMake Build Type
-      run: |
-        cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
-        
-        # Tambahkan Release build type jika tidak debug
-        sed -i "/if self.debug_build:/,/'CMAKE_BUILD_TYPE': 'Debug'/ { /'CMAKE_BUILD_TYPE': 'Debug'/a\\        else:\\n            defines['CMAKE_BUILD_TYPE'] = 'Release'
-        }" builders.py
-        
-        echo "Updated builders.py CMake configuration"
-
-    - name: Modify configs.py - Linux ARM64 Config
-      run: |
-        cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
-        
-        cat > /tmp/configs_patch.py << 'EOF'
-        import re
-        
-        with open('configs.py', 'r') as f:
-            content = f.read()
-        
-        # Update LinuxConfig untuk ARM64
-        content = re.sub(
-            r"sysroot: Optional\\[Path\\] = paths\\.GCC_ROOT / 'host' / 'x86_64-linux-glibc2\\.17-4\\.8' / 'sysroot'",
-            "sysroot: Optional[Path] = Path('/')",
-            content
-        )
-        content = re.sub(
-            r"gcc_root: Path = paths\\.GCC_ROOT / 'host' / 'x86_64-linux-glibc2\\.17-4\\.8'",
-            "gcc_root: Path = Path('/')",
-            content
-        )
-        content = re.sub(
-            r"gcc_triple: str = 'x86_64-linux'",
-            "gcc_triple: str = 'aarch64-linux'",
-            content
-        )
-        
-        # Update llvm_triple property
-        content = re.sub(
-            r"return 'i386-unknown-linux-gnu' if self\\.is_32_bit else 'x86_64-unknown-linux-gnu'",
-            "return 'i386-unknown-linux-gnu' if self.is_32_bit else 'aarch64-unknown-linux-gnu'",
-            content
-        )
-        
-        with open('configs.py', 'w') as f:
-            f.write(content)
-        
-        print("Updated configs.py for ARM64")
-        EOF
-        
-        python3 /tmp/configs_patch.py
-
-    - name: Modify hosts.py - OS Tag Mapping
-      run: |
-        cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
-        
-        sed -i "s/Host.Linux: 'linux-x86'/Host.Linux: 'linux-arm64'/" hosts.py
-        
-        echo "Updated hosts.py:"
-        grep -A3 "def os_tag" hosts.py || true
-
-    - name: Modify paths.py - ARM64 Paths
-      run: |
-        cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
-        
-        # Update CLANG_PREBUILT_DIR
-        sed -i 's|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / '"'"'clang'"'"' / '"'"'host'"'"' / hosts.build_host().os_tag / constants.CLANG_PREBUILT_VERSION)|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / '"'"'clang'"'"' / '"'"'host'"'"' / hosts.build_host().os_tag)|' paths.py
-        
-        # Update NINJA_BIN_PATH
-        sed -i "s/hosts.build_host().os_tag_musl/hosts.build_host().os_tag/" paths.py
-        
-        echo "Updated paths.py for ARM64"
-
-    - name: Build LLVM Toolchain
-      run: |
-        cd ${{ env.SOURCE_ROOT }}
-        
-        # Set environment variables
-        export PYTHONPATH="${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src:${{ env.SOURCE_ROOT }}/toolchain/llvm_android"
-        export PATH="/usr/bin:$PATH"
-        
-        # Run build
-        python3 toolchain/llvm_android/build.py \
-          --no-build windows \
-          --skip-tests \
-          --no-musl \
-          -j$(nproc) \
-          2>&1 | tee build.log
-
-    - name: Package Build Artifacts
-      if: success()
-      run: |
-        cd ${{ env.SOURCE_ROOT }}
-        
-        # Create output directory
-        mkdir -p ${{ github.workspace }}/artifacts
-        
-        # Package stage2 output
-        if [ -d "out/stage2" ]; then
-          tar -czf ${{ github.workspace }}/artifacts/llvm-toolchain-r27d-arm64-stage2.tar.gz -C out stage2
-        fi
-        
-        if [ -d "out/stage2-install" ]; then
-          tar -czf ${{ github.workspace }}/artifacts/llvm-toolchain-r27d-arm64-install.tar.gz -C out stage2-install
-        fi
-        
-        # Copy clang_source_info.md jika ada
-        if [ -f "out/stage2/lib/clang/*/clang_source_info.md" ]; then
-          cp out/stage2/lib/clang/*/clang_source_info.md ${{ github.workspace }}/artifacts/ 2>/dev/null || true
-        fi
-        
-        ls -lah ${{ github.workspace }}/artifacts/
-
-    - name: Upload Build Artifacts
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: llvm-toolchain-r27d-arm64
-        path: ${{ github.workspace }}/artifacts/*
-        retention-days: 7
-
-    - name: Upload Build Logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: ${{ env.SOURCE_ROOT }}/build.log
-        retention-days: 3
-
-    - name: Create NDK r27d Package
-      if: success()
-      run: |
-        # Download NDK r27d untuk modifikasi
-        cd ${{ github.workspace }}
-        
-        wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
-        unzip -q android-ndk-r27d-linux.zip
-        mv android-ndk-r27d android-ndk-r27d-arm64
-        
-        R29_PATH="${{ github.workspace }}/android-ndk-r27d-arm64"
-        SOURCE_OUT="${{ env.SOURCE_ROOT }}/out"
-        
-        # Setup prebuilt binaries
-        cd ${R29_PATH}/prebuilt/linux-x86_64/bin 2>/dev/null || cd ${R29_PATH}/prebuilt/linux-arm64/bin
-        ln -sf /usr/bin/make .
-        ln -sf /usr/bin/yasm . 2>/dev/null || true
-        ln -sf /usr/bin/ytasm . 2>/dev/null || true
-        
-        # Copy LLVM toolchain
-        mkdir -p ${R29_PATH}/toolchains/llvm/prebuilt/linux-arm64/bin
-        cp -f ${SOURCE_OUT}/stage2/bin/* ${R29_PATH}/toolchains/llvm/prebuilt/linux-arm64/bin/
-        
-        # Setup lib/clang
-        mkdir -p ${R29_PATH}/toolchains/llvm/prebuilt/linux-arm64/lib/clang
-        CLANG_VER=$(ls ${SOURCE_OUT}/stage2/lib/clang/ | head -1)
-        cp -r ${SOURCE_OUT}/stage2/lib/clang/${CLANG_VER} ${R29_PATH}/toolchains/llvm/prebuilt/linux-arm64/lib/clang/
-        
-        # Copy libs
-        if [ -d "${R29_PATH}/toolchains/llvm/prebuilt/linux-arm64/lib/clang/${CLANG_VER}/lib" ]; then
-          cd ${R29_PATH}/toolchains/llvm/prebuilt/linux-arm64/lib/clang/${CLANG_VER}/lib
-          # Copy dari original NDK jika perlu
-          if [ -d "${R29_PATH}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/21/lib/linux" ]; then
-            cp -r ${R29_PATH}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/21/lib/linux . 2>/dev/null || true
-          fi
-        fi
-        
-        # Update ndk_bin_common.sh untuk aarch64
-        NDK_BIN_COMMON="${R29_PATH}/build/tools/ndk_bin_common.sh"
-        if [ -f "$NDK_BIN_COMMON" ]; then
-          sed -i 's/x86_64|amd64|aarch64)/x86_64|amd64)/' "$NDK_BIN_COMMON"
-          sed -i '/arm64) HOST_ARCH=arm64;;/a\\  aarch64) HOST_ARCH=aarch64;;' "$NDK_BIN_COMMON"
-        fi
-        
-        # Package final NDK
-        zip -r ${{ github.workspace }}/artifacts/android-ndk-r27d-linux-arm64.zip android-ndk-r27d-arm64/
-        
-        echo "NDK r27d ARM64 package created successfully"
-
-    - name: Upload NDK Package
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: android-ndk-r27d-linux-arm64
-        path: ${{ github.workspace }}/artifacts/android-ndk-r27d-linux-arm64.zip
-        retention-days: 7
-
-    - name: Cleanup
-      if: always()
-      run: |
-        cd ${{ github.workspace }}
-        rm -rf android-ndk-r27d-linux.zip android-ndk-r27d-arm64
-        sudo rm -rf ${{ env.SOURCE_ROOT }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-r27d-aarch64
+          path: $GITHUB_WORKSPACE/artifacts
