@@ -1,0 +1,197 @@
+name: Build NDK AARCH64 Linux r27d
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-ndk:
+    runs-on: ubuntu-24.04-arm
+    # Gunakan ARM64 runner jika tersedia, atau jalankan di x86_64 dengan QEMU
+    # Untuk build native aarch64, gunakan: runs-on: ubuntu-24.04-arm (GitHub hosted ARM runners)
+    
+    steps:
+      - name: Setup ARM64 Environment
+        uses: uraimo/run-on-arch-action@v2
+        if: runner.arch != 'ARM64'
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            repo \
+            python3 \
+            python3-pip \
+            libc++-dev \
+            bison \
+            ninja-build \
+            cmake \
+            build-essential \
+            curl \
+            wget \
+            xz-utils \
+            libssl-dev \
+            swig \
+            libzstd-dev \
+            libxml2-dev \
+            libncurses5-dev \
+            m4 \
+            make \
+            yasm
+
+      - name: Setup Source Directory
+        run: |
+          mkdir -p $HOME/ndk-build
+          export SOURCE_ROOT=$HOME/ndk-build
+          echo "SOURCE_ROOT=$SOURCE_ROOT" >> $GITHUB_ENV
+
+      - name: Clone Android Source (llvm-toolchain branch)
+        run: |
+          cd ${{ env.SOURCE_ROOT }}
+          git config --global user.email "build@github.com"
+          git config --global user.name "GitHub Build"
+          repo init -u https://android.googlesource.com/platform/manifest -b llvm-toolchain --depth=1
+          repo sync -c -j$(nproc)
+
+      - name: Create Symbolic Links
+        run: |
+          cd ${{ env.SOURCE_ROOT }}
+          
+          # Bison dan Ninja links
+          mkdir -p prebuilts/build-tools/linux-arm64/bin
+          cd prebuilts/build-tools/linux-arm64/bin
+          ln -sf /usr/bin/bison .
+          ln -sf /usr/bin/ninja .
+          
+          # Clang host link
+          cd ${{ env.SOURCE_ROOT }}/prebuilts/clang/host
+          ln -sf /usr linux-arm64
+          
+          # CMake link
+          cd ${{ env.SOURCE_ROOT }}/prebuilts/cmake
+          ln -sf /usr linux-arm64
+          
+          # Python link
+          cd ${{ env.SOURCE_ROOT }}/prebuilts/python
+          ln -sf /usr linux-arm64
+
+      - name: Patch do_build.py - Disable Stage1 & Set System Toolchain
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android
+          
+          # Backup original
+          cp do_build.py do_build.py.bak
+          
+          # Patch menggunakan sed untuk disable stage1 dan set system toolchain
+          sed -i 's/if not args.bootstrap_use_prebuilt and not args.bootstrap_use:/# if not args.bootstrap_use_prebuilt and not args.bootstrap_use:/g' do_build.py
+          sed -i 's/    stage1 = builders.Stage1Builder(host_configs)/#     stage1 = builders.Stage1Builder(host_configs)/g' do_build.py
+          sed -i 's/    stage1.build_name = .stage1./#     stage1.build_name = .stage1./g' do_build.py
+          sed -i 's/    stage1.svn_revision = android_version.get_svn_revision()/#     stage1.svn_revision = android_version.get_svn_revision()/g' do_build.py
+          sed -i 's/    stage1.build_lldb = build_lldb/#     stage1.build_lldb = build_lldb/g' do_build.py
+          sed -i 's/    stage1.enable_mlgo = mlgo/#     stage1.enable_mlgo = mlgo/g' do_build.py
+          sed -i 's/    stage1.build_extra_tools = args.run_tests_stage1/#     stage1.build_extra_tools = args.run_tests_stage1/g' do_build.py
+          sed -i 's/    stage1.build_cross_runtimes = hosts.build_host().is_linux/#     stage1.build_cross_runtimes = hosts.build_host().is_linux/g' do_build.py
+          sed -i 's/    stage1.libzstd = libzstd_builder/#     stage1.libzstd = libzstd_builder/g' do_build.py
+          sed -i 's/    stage1.build()/#     stage1.build()/g' do_build.py
+          sed -i 's/    if hosts.build_host().is_linux:/#     if hosts.build_host().is_linux:/g' do_build.py
+          sed -i 's/        add_header_links/#         add_header_links/g' do_build.py
+          sed -i 's/    if not args.skip_tests and args.run_tests_stage1:/#     if not args.skip_tests and args.run_tests_stage1:/g' do_build.py
+          sed -i 's/        stage1.test()/#         stage1.test()/g' do_build.py
+          sed -i 's/    set_default_toolchain(stage1.installed_toolchain)/#     set_default_toolchain(stage1.installed_toolchain)/g' do_build.py
+          sed -i 's/    if args.bootstrap_use:/#     if args.bootstrap_use:/g' do_build.py
+          sed -i 's/        if (paths.OUT_DIR/#         if (paths.OUT_DIR/g' do_build.py
+          sed -i 's/            shutil.rmtree/#             shutil.rmtree/g' do_build.py
+          sed -i 's/        with timer.Timer/#         with timer.Timer/g' do_build.py
+          sed -i 's/            utils.extract_tarball/#             utils.extract_tarball/g' do_build.py
+          sed -i 's/        if (paths.OUT_DIR/#         if (paths.OUT_DIR/g' do_build.py
+          sed -i 's/            (paths.OUT_DIR/#             (paths.OUT_DIR/g' do_build.py
+          sed -i 's/        set_default_toolchain(toolchains.Toolchain(paths.OUT_DIR/#         set_default_toolchain(toolchains.Toolchain(paths.OUT_DIR/g' do_build.py
+          sed -i 's/    if args.bootstrap_build_only:/#     if args.bootstrap_build_only:/g' do_build.py
+          sed -i 's/        with timer.Timer/#         with timer.Timer/g' do_build.py
+          sed -i 's/            utils.create_tarball/#             utils.create_tarball/g' do_build.py
+          sed -i 's/        return/#         return/g' do_build.py
+          
+          # Tambahkan set_default_toolchain setelah blok stage1
+          sed -i '/#         return/a\    set_default_toolchain(toolchains.Toolchain(Path("/usr"),Path("/usr")))' do_build.py
+          
+          # Disable libxml2 dan xz build
+          sed -i 's/libxml2_builder.build()/# libxml2_builder.build()/g' do_build.py
+          sed -i 's/xz_builder.build()/# xz_builder.build()/g' do_build.py
+
+      - name: Patch py3_utils.py - Change Host Tag
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android
+          sed -i "s/return 'linux-x86'/return 'linux-arm64'/g" py3_utils.py
+
+      - name: Patch builders.py - Add Release Build Type
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
+          # Tambahkan else clause untuk CMAKE_BUILD_TYPE Release
+          sed -i "/if self.debug_build:/,/'CMAKE_BUILD_TYPE': 'Debug'/ { /'CMAKE_BUILD_TYPE': 'Debug'/a\\        else:\\n            defines['CMAKE_BUILD_TYPE'] = 'Release' }" builders.py
+
+      - name: Patch configs.py - Update Linux Config for ARM64
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
+          
+          # Update sysroot, gcc_root, gcc_triple
+          sed -i 's|sysroot: Optional\[Path\] = paths.GCC_ROOT / .host. / .x86_64-linux-glibc2.17-4.8. / .sysroot.|sysroot: Optional[Path] = Path("/")|g' configs.py
+          sed -i 's|gcc_root: Path = paths.GCC_ROOT / .host. / .x86_64-linux-glibc2.17-4.8.|gcc_root: Path = Path("/")|g' configs.py
+          sed -i "s/gcc_triple: str = 'x86_64-linux'/gcc_triple: str = 'aarch64-linux'/g" configs.py
+          
+          # Update llvm_triple
+          sed -i "s/'x86_64-unknown-linux-gnu'/'aarch64-unknown-linux-gnu'/g" configs.py
+
+      - name: Patch hosts.py - Update Host OS Tag
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
+          sed -i "s/Host.Linux: 'linux-x86'/Host.Linux: 'linux-arm64'/g" hosts.py
+
+      - name: Patch paths.py - Update Paths for ARM64
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/toolchain/llvm_android/src/llvm_android
+          
+          # Update CLANG_PREBUILT_DIR
+          sed -i "s|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag|CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR / 'clang' / 'host' / hosts.build_host().os_tag|g" paths.py
+          sed -i "/CLANG_PREBUILT_DIR: Path = (PREBUILTS_DIR \/ 'clang' \/ 'host' \/ hosts.build_host().os_tag/,/constants.CLANG_PREBUILT_VERSION)/ { /constants.CLANG_PREBUILT_VERSION)/d; s|/ constants.CLANG_PREBUILT_VERSION)||g }" paths.py
+          
+          # Update NINJA_BIN_PATH
+          sed -i "s|hosts.build_host().os_tag_musl|hosts.build_host().os_tag|g" paths.py
+
+      - name: Build Toolchain
+        run: |
+          cd ${{ env.SOURCE_ROOT }}
+          python3 toolchain/llvm_android/build.py --no-build windows --skip-tests --no-musl
+        timeout-minutes: 240
+
+      - name: Package Build Output
+        run: |
+          cd ${{ env.SOURCE_ROOT }}/out
+          tar -czf ndk-aarch64-linux-r27d.tar.gz stage2/ stage2-install/
+          mv ndk-aarch64-linux-r27d.tar.gz $GITHUB_WORKSPACE/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-aarch64-linux-r27d
+          path: ndk-aarch64-linux-r27d.tar.gz
+          retention-days: 7
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: r27d-aarch64-${{ github.run_number }}
+          name: NDK r27d AARCH64 Linux Build ${{ github.run_number }}
+          files: ndk-aarch64-linux-r27d.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
