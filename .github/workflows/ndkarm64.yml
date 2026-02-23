@@ -2,7 +2,7 @@ name: Build Ndk
 
 on:
   push:
-  branches: [ "main" ]
+    branches: [ "main" ]
   #pull_request:
   #  branches: [ "main" ]
 
