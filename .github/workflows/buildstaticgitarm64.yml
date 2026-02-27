@@ -34,8 +34,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y \
             build-essential \
-            clang \
-            gcc \
             zlib1g-dev \
             libssl-dev \
             libexpat1-dev \
@@ -48,7 +46,7 @@ jobs:
 
           make configure
           ./configure \
-            CC=musl-gcc \
+            CC=gcc \
             CFLAGS="-Os -ffunction-sections -fdata-sections" \
             LDFLAGS="-static -Wl,--gc-sections" \
             --prefix=/tmp/git-install \
