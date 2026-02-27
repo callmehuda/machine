@@ -97,7 +97,7 @@ jobs:
           # Templates
           cp -r $INSTALL/share/git-core/templates/. $OUT/share/git-core/templates/
 
-          chmod +x $OUT/git.sh
+          
 
           echo "=== Contents ==="
           find $OUT -type f | sort
