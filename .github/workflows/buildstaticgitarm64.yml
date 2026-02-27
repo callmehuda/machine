@@ -70,39 +70,49 @@ jobs:
           make install \
             NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1 NO_GETTEXT=1 NO_ICONV=1
 
-      - name: Strip & deduplicate libexec
+      - name: Package minimal
         run: |
           INSTALL=/tmp/git-install
+          OUT=/tmp/git-out
 
-          echo "=== Size sebelum ==="
-          du -sh $INSTALL/
+          mkdir -p $OUT/bin
+          mkdir -p $OUT/libexec/git-core
+          mkdir -p $OUT/share/git-core/templates
 
-          # Strip semua binary
-          strip $INSTALL/bin/git
-          find $INSTALL/libexec/git-core -type f -executable | xargs strip 2>/dev/null || true
+          # Binary utama
+          cp $INSTALL/bin/git $OUT/bin/git
+          strip $OUT/bin/git
 
-          # libexec berisi puluhan copy binary yang identik dengan git utama
-          # Ganti semua yang identik dengan hardlink ke git utama
-          GIT_BIN=$INSTALL/bin/git
-          for f in $INSTALL/libexec/git-core/*; do
-            [ -f "$f" ] && cmp -s "$GIT_BIN" "$f" && ln -f "$GIT_BIN" "$f"
-          done
+          # Hanya remote helpers yang dibutuhkan untuk HTTPS
+          # git-remote-https biasanya hardlink ke git, tapi kita butuh dia ada di libexec
+          cp $INSTALL/libexec/git-core/git-remote-https $OUT/libexec/git-core/ 2>/dev/null || \
+            cp $OUT/bin/git $OUT/libexec/git-core/git-remote-https
+          cp $INSTALL/libexec/git-core/git-remote-http  $OUT/libexec/git-core/ 2>/dev/null || \
+            cp $OUT/bin/git $OUT/libexec/git-core/git-remote-http
 
-          echo "=== Size sesudah dedupe ==="
-          du -sh $INSTALL/
+          # Strip remote helpers
+          strip $OUT/libexec/git-core/git-remote-https 2>/dev/null || true
+          strip $OUT/libexec/git-core/git-remote-http  2>/dev/null || true
 
-      - name: Verify
-        run: |
-          BIN=/tmp/git-install/bin/git
-          file $BIN
-          ldd $BIN || echo "Static confirmed."
-          $BIN --version
-          $BIN version --build-options
-          ls -lh $BIN
+          # Templates
+          cp -r $INSTALL/share/git-core/templates/. $OUT/share/git-core/templates/
+
+          chmod +x $OUT/git.sh
+
+          echo "=== Contents ==="
+          find $OUT -type f | sort
+          echo "=== Sizes ==="
+          du -sh $OUT/
+          ls -lh $OUT/bin/git
+          ls -lh $OUT/libexec/git-core/
+
+          echo "=== Verify ==="
+          $OUT/bin/git --version
+          $OUT/bin/git version --build-options
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: git-${{ steps.latest.outputs.tag }}-android-arm64-static
-          path: /tmp/git-install/
+          path: /tmp/git-out/
           retention-days: 7
