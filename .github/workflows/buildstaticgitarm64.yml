@@ -53,6 +53,7 @@ jobs:
           make LDFLAGS="-static" NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1 NO_IMAP=1 NO_EXPAT=1 NO_CURL=0
           make install LDFLAGS="-static" NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1 NO_IMAP=1 NO_EXPAT=1 NO_CURL=0
           make clean
+          ls ./myoutput/libexec/git-core
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
