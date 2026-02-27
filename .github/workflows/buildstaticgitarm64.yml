@@ -25,8 +25,7 @@ jobs:
       - name: Clone git/git at latest tag
         run: |
           TAG="${{ steps.latest.outputs.tag }}"
-          git clone --depth 1 --branch $TAG https://github.com/git/git.git git-src
-          cd git-src && git log --oneline -1
+          git clone --depth 1 --branch $TAG https://github.com/git/git.git
 
       - name: Install build dependencies
         run: |
@@ -43,76 +42,23 @@ jobs:
 
       - name: Build static git binary
         run: |
-          cd git-src
+
+          mkdir -p output
+          cd git
+
+          export NO_OPENSSL=1
+          export NO_CURL=1
+          export CFLAGS="${CFLAGS} -static"
 
           make configure
-          ./configure \
-            CC=gcc \
-            CFLAGS="-Os -ffunction-sections -fdata-sections" \
-            LDFLAGS="-static -Wl,--gc-sections" \
-            --prefix=/tmp/git-install \
-            NO_TCLTK=1 \
-            NO_PYTHON=1 \
-            NO_PERL=1 \
-            NO_GETTEXT=1 \
-            NO_ICONV=1
-
-          make -j$(nproc) \
-            CC=gcc \
-            CFLAGS="-Os -ffunction-sections -fdata-sections" \
-            LDFLAGS="-static -Wl,--gc-sections" \
-            NO_TCLTK=1 \
-            NO_PYTHON=1 \
-            NO_PERL=1 \
-            NO_GETTEXT=1 \
-            NO_ICONV=1
-
-          make install \
-            NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1 NO_GETTEXT=1 NO_ICONV=1
-
-      - name: Package minimal
-        run: |
-          INSTALL=/tmp/git-install
-          OUT=/tmp/git-out
-
-          mkdir -p $OUT/bin
-          mkdir -p $OUT/libexec/git-core
-          mkdir -p $OUT/share/git-core/templates
-
-          # Binary utama
-          cp $INSTALL/bin/git $OUT/bin/git
-          strip $OUT/bin/git
-
-          # Hanya remote helpers yang dibutuhkan untuk HTTPS
-          # git-remote-https biasanya hardlink ke git, tapi kita butuh dia ada di libexec
-          cp $INSTALL/libexec/git-core/git-remote-https $OUT/libexec/git-core/ 2>/dev/null || \
-            cp $OUT/bin/git $OUT/libexec/git-core/git-remote-https
-          cp $INSTALL/libexec/git-core/git-remote-http  $OUT/libexec/git-core/ 2>/dev/null || \
-            cp $OUT/bin/git $OUT/libexec/git-core/git-remote-http
-
-          # Strip remote helpers
-          strip $OUT/libexec/git-core/git-remote-https 2>/dev/null || true
-          strip $OUT/libexec/git-core/git-remote-http  2>/dev/null || true
-
-          # Templates
-          cp -r $INSTALL/share/git-core/templates/. $OUT/share/git-core/templates/
-
+          ./configure prefix=../output
+          make
+          make install
+          make clean
           
-
-          echo "=== Contents ==="
-          find $OUT -type f | sort
-          echo "=== Sizes ==="
-          du -sh $OUT/
-          ls -lh $OUT/bin/git
-          ls -lh $OUT/libexec/git-core/
-
-          echo "=== Verify ==="
-          $OUT/bin/git --version
-          $OUT/bin/git version --build-options
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: git-${{ steps.latest.outputs.tag }}-android-arm64-static
-          path: /tmp/git-out/
+          path: ./output
           retention-days: 7
