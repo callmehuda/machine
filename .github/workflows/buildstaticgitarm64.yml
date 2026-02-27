@@ -44,9 +44,6 @@ jobs:
         run: |
           cd git
           mkdir -p myoutput
-
-          export NO_OPENSSL=1
-          export NO_CURL=1
           export CFLAGS="${CFLAGS} -static"
 
           make configure
