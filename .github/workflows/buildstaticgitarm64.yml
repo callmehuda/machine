@@ -44,12 +44,11 @@ jobs:
         run: |
           cd git
           mkdir -p myoutput
-          export CFLAGS="${CFLAGS} -static"
 
           make configure
           ./configure prefix=$(pwd)/myoutput
-          make
-          make install
+          make LDFLAGS="-static" NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1
+          make install LDFLAGS="-static" NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1
           make clean
           
       - name: Upload artifact
