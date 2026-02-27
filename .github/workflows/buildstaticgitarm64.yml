@@ -2,136 +2,98 @@ name: Build Static Git for Android ARM64
 
 on:
   workflow_dispatch:
-    inputs:
-      git_version:
-        description: 'Git version to build (e.g. 2.47.2)'
-        required: false
-        default: '2.53.0'
   push:
     branches: "main"
-    tags:
-      - 'v*'
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm  # Native ARM64 runner (free for public repos)
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    runs-on: ubuntu-24.04-arm  # Native ARM64 runner
 
-      - name: Set Git version
-        id: vars
+    steps:
+      - name: Get latest git tag from git/git
+        id: latest
         run: |
-          VERSION="${{ github.event.inputs.git_version || '2.47.2' }}"
-          echo "GIT_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Building git version: $VERSION"
+          LATEST_TAG=$(git ls-remote --tags --sort='-v:refname' \
+            https://github.com/git/git.git \
+            'v[0-9]*.[0-9]*.[0-9]*' \
+            | grep -v '\^{}' \
+            | head -1 \
+            | sed 's|.*refs/tags/||')
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest git tag: $LATEST_TAG"
+
+
+      - name: Clone git/git at latest tag
+        run: |
+          TAG="${{ steps.latest.outputs.tag }}"
+          git clone --depth 1 --branch $TAG https://github.com/git/git.git git-src
+          cd git-src && git log --oneline -1
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y \
             build-essential \
-            libssl-dev \
-            libcurl4-openssl-dev \
-            libexpat-dev \
+            musl-tools \
+            musl-dev \
             zlib1g-dev \
+            libssl-dev \
+            libexpat1-dev \
             gettext \
-            wget
-
-      - name: Download Git source
-        run: |
-          wget -q https://www.kernel.org/pub/software/scm/git/git-${{ env.GIT_VERSION }}.tar.gz
-          tar xzf git-${{ env.GIT_VERSION }}.tar.gz
-
-      - name: Install musl-tools for static linking
-        run: |
-          sudo apt-get install -y musl-tools musl-dev
+            pkg-config
 
       - name: Build static git binary
         run: |
-          cd git-${{ env.GIT_VERSION }}
+          cd git-src
 
-          # Install static libraries
-          sudo apt-get install -y \
-            libssl-dev \
-            zlib1g-dev \
-            libexpat1-dev
-
-          # Configure untuk static build
           make configure
           ./configure \
             CC=musl-gcc \
-            CFLAGS="-Os" \
-            LDFLAGS="-static -s" \
-            --prefix=/usr/local \
-            --without-tcltk \
-            --without-python \
-            NO_PERL=1 \
-            NO_TCLTK=1
-
-          # Build
-          make -j$(nproc) \
+            CFLAGS="-Os -ffunction-sections -fdata-sections" \
+            LDFLAGS="-static -Wl,--gc-sections" \
+            --prefix=/tmp/git-install \
             NO_TCLTK=1 \
             NO_PYTHON=1 \
             NO_PERL=1 \
-            LDFLAGS="-static -s" \
-            CC=musl-gcc
+            NO_GETTEXT=1 \
+            NO_ICONV=1
 
-          # Strip untuk minimize size
-          strip git || true
+          make -j$(nproc) \
+            CC=musl-gcc \
+            CFLAGS="-Os -ffunction-sections -fdata-sections" \
+            LDFLAGS="-static -Wl,--gc-sections" \
+            NO_TCLTK=1 \
+            NO_PYTHON=1 \
+            NO_PERL=1 \
+            NO_GETTEXT=1 \
+            NO_ICONV=1
 
-          # Verifikasi binary
-          file git
-          ldd git || echo "Static binary confirmed (ldd failed = good)"
-          ./git --version
+          make install \
+            NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1 NO_GETTEXT=1 NO_ICONV=1
 
-      - name: Prepare output
+      - name: Verify & package
         run: |
+          TAG="${{ steps.latest.outputs.tag }}"
+          BIN=/tmp/git-install/bin/git
+
+          strip $BIN
+
+          echo "=== File info ==="
+          file $BIN
+          echo "=== Static check ==="
+          ldd $BIN || echo "Static confirmed."
+          echo "=== Version ==="
+          $BIN --version
+          echo "=== Size ==="
+          ls -lh $BIN
+
           mkdir -p output
-          cp git-${{ env.GIT_VERSION }}/git output/git
-          
-          # Rename dengan versi dan arch
-          cp output/git output/git-${{ env.GIT_VERSION }}-android-arm64-static
-          
-          # Info binary
-          echo "=== Binary Info ==="
-          file output/git
-          ls -lh output/git
-          echo "Version:"
-          output/git --version
+          cp $BIN output/git
+          cp $BIN output/git-${TAG}-android-arm64-static
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: git-${{ env.GIT_VERSION }}-android-arm64-static
+          name: git-android-arm64-static
           path: output/
-          retention-days: 90
-
-      - name: Create Release (jika di-trigger dari tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            output/git-${{ env.GIT_VERSION }}-android-arm64-static
-          body: |
-            ## Static Git ${{ env.GIT_VERSION }} for Android ARM64
-            
-            Binary ini dicompile secara static menggunakan musl-gcc di native ARM64 runner.
-            Tidak perlu Termux atau shared library tambahan.
-            
-            ### Cara Pakai di MT Manager Terminal
-            ```bash
-            # Copy binary ke storage
-            cp /path/to/git /data/local/tmp/git
-            chmod +x /data/local/tmp/git
-            
-            # Setup
-            export HOME=/sdcard
-            /data/local/tmp/git config --global user.name "Nama"
-            /data/local/tmp/git config --global user.email "email@example.com"
-            
-            # Clone
-            /data/local/tmp/git clone https://username:TOKEN@github.com/user/repo
-            ```
-          generate_release_notes: false
+          retention-days: 7
