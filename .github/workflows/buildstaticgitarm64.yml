@@ -88,13 +88,9 @@ jobs:
           echo "=== Size ==="
           ls -lh $BIN
 
-          mkdir -p output
-          cp $BIN output/git
-          cp $BIN output/git-${TAG}-android-arm64-static
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: git-${{ steps.latest.outputs.tag }}-android-arm64-static
-          path: output/
+          path: /tmp/git-install/
           retention-days: 7
