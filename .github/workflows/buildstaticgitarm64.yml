@@ -39,6 +39,8 @@ jobs:
             libpcre2-dev \
             gettext \
             pkg-config
+          ls /usr/lib/aarch64-linux-gnu/libcurl.a || echo "No static libcurl!"
+          ls /usr/lib/aarch64-linux-gnu/libcurl*.so
 
       - name: Build static git binary
         run: |
@@ -47,6 +49,7 @@ jobs:
 
           make configure
           ./configure prefix=$(pwd)/myoutput
+          grep 'CURL_LDFLAGS' config.mak.autogen || echo "CURL NOT FOUND"
           make LDFLAGS="-static" NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1
           make install LDFLAGS="-static" NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1
           make clean
