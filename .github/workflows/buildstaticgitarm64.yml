@@ -70,22 +70,34 @@ jobs:
           make install \
             NO_TCLTK=1 NO_PYTHON=1 NO_PERL=1 NO_GETTEXT=1 NO_ICONV=1
 
-      - name: Verify & package
+      - name: Strip & deduplicate libexec
         run: |
-          TAG="${{ steps.latest.outputs.tag }}"
+          INSTALL=/tmp/git-install
+
+          echo "=== Size sebelum ==="
+          du -sh $INSTALL/
+
+          # Strip semua binary
+          strip $INSTALL/bin/git
+          find $INSTALL/libexec/git-core -type f -executable | xargs strip 2>/dev/null || true
+
+          # libexec berisi puluhan copy binary yang identik dengan git utama
+          # Ganti semua yang identik dengan hardlink ke git utama
+          GIT_BIN=$INSTALL/bin/git
+          for f in $INSTALL/libexec/git-core/*; do
+            [ -f "$f" ] && cmp -s "$GIT_BIN" "$f" && ln -f "$GIT_BIN" "$f"
+          done
+
+          echo "=== Size sesudah dedupe ==="
+          du -sh $INSTALL/
+
+      - name: Verify
+        run: |
           BIN=/tmp/git-install/bin/git
-
-          strip $BIN
-
-          echo "=== File info ==="
           file $BIN
-          echo "=== Static check ==="
           ldd $BIN || echo "Static confirmed."
-          echo "=== Version ==="
           $BIN --version
-          echo "=== Built-in features ==="
           $BIN version --build-options
-          echo "=== Size ==="
           ls -lh $BIN
 
       - name: Upload artifact
