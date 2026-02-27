@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm  # Native ARM64 runner
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Get latest git tag from git/git
@@ -21,7 +21,6 @@ jobs:
             | sed 's|.*refs/tags/||')
           echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "Latest git tag: $LATEST_TAG"
-
 
       - name: Clone git/git at latest tag
         run: |
@@ -37,6 +36,8 @@ jobs:
             zlib1g-dev \
             libssl-dev \
             libexpat1-dev \
+            libcurl4-openssl-dev \
+            libpcre2-dev \
             gettext \
             pkg-config
 
@@ -82,6 +83,8 @@ jobs:
           ldd $BIN || echo "Static confirmed."
           echo "=== Version ==="
           $BIN --version
+          echo "=== Built-in features ==="
+          $BIN version --build-options
           echo "=== Size ==="
           ls -lh $BIN
 
@@ -92,6 +95,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: git-android-arm64-static
+          name: git-${{ steps.latest.outputs.tag }}-android-arm64-static
           path: output/
           retention-days: 7
