@@ -27,21 +27,15 @@ jobs:
       - name: Setup Cloudflared
         run: |
           #sudo cloudflared service install eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiMTBiMjdhNDctNTdlYS00ZWM1LWIyNzctYWFlMDZkNGJmZDMzIiwicyI6Ik56RXpOemRtWVRRdFpqYzFaaTAwWldRNExUaG1Zek10WmpCa1lXTm1Zek0wT1RkayJ9
-          cloudflared tunnel run --token eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiYzE0OTEyZmEtZGEyZC00MDdlLTkzODQtOWI0Njg0ODQwYzdhIiwicyI6Ik9HVm1ORFk1WWpZdE1XWm1NeTAwTUdObUxUbGpOalV0WWpVelpXSm1NbUkyWW1JeSJ9 &
+          #cloudflared tunnel run --token eyJhIjoiOWFjMWUxOTExMmU5ZWZmZDIzNmFlNDk1NDIyYmY2ZjgiLCJ0IjoiYzE0OTEyZmEtZGEyZC00MDdlLTkzODQtOWI0Njg0ODQwYzdhIiwicyI6Ik9HVm1ORFk1WWpZdE1XWm1NeTAwTUdObUxUbGpOalV0WWpVelpXSm1NbUkyWW1JeSJ9 &
           
           
       - name: Idk
         run: |
-          docker run \
-          --name my \
-          --privileged \
-          -p 8000:8000 \
-          shmayro/scrcpy-web:latest \
-          sh -c "wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && \
-          chmod +x cloudflared-linux-amd64 && \
-          ./cloudflared-linux-amd64 access tcp --hostname adba04.hudacihuyy.qzz.io --url localhost:5555 & \
-          sleep 5 && \
-          adb connect localhost:5555 && \
-          npm start"
+          bash crl &
+          bash crl &
+          bash crl &
+          bash crl &
+          bash crl
 
 
