@@ -22,7 +22,7 @@ jobs:
 
           echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
 
-          sudo apt-get update && sudo apt-get install cloudflared
+          sudo apt-get update && sudo apt-get install cloudflared && sudo apt install parallel
 
       - name: Setup Cloudflared
         run: |
@@ -32,6 +32,8 @@ jobs:
           
       - name: Idk
         run: |
-          bash crl | bash crl
+          parallel -j 5 'bash crl' ::: {1..5}
+          
+
 
 
