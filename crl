@@ -1,1 +1,1 @@
-while true; do curl -X POST "https://safelinku.com/api/v1/links"   -H "Authorization: 65b295c090ecfd2971de2de476835f845d026414"   -H "Content-Type: application/json"   -d "{\"url\": \"https://github.com/${RANDOM}\"}" done
+while true; do curl -s -X POST "https://safelinku.com/api/v1/links"   -H "Authorization: 65b295c090ecfd2971de2de476835f845d026414"   -H "Content-Type: application/json"   -d "{\"url\": \"https://github.com/${RANDOM}\"}"; done
