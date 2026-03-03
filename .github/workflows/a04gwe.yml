@@ -32,10 +32,6 @@ jobs:
           
       - name: Idk
         run: |
-          bash crl &
-          bash crl &
-          bash crl &
-          bash crl &
-          bash crl
+          bash crl | bash crl
 
 
