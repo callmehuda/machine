@@ -3,6 +3,10 @@ name: scrcpy web
 on:
   push:
     branches: [ "main" ]
+
+  schedule:
+    - cron: '0 */6 * * *'
+
   #pull_request:
   #  branches: [ "main" ]
 
