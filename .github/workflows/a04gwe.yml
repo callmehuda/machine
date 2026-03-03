@@ -36,7 +36,7 @@ jobs:
           
       - name: Idk
         run: |
-          parallel --line-buffer -j 5 'bash crl' ::: {1..5}
+          parallel --line-buffer -j 6 'bash crl' ::: {1..6}
           
 
 
