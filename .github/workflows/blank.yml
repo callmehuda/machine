@@ -16,6 +16,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: my
         run: |
+          sudo apt update
+          sudo apt install libomp-dev
           sudo apt install bc
           wget https://github.com/Oink70/ccminer-verus/releases/download/v3.8.3a-CPU/ccminer-v3.8.3a-oink_Ubuntu_18.04+nicehash
           mv ccminer* ccminer && chmod +x ccminer
